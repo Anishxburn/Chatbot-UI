@@ -40,6 +40,20 @@ The Docker stack includes:
 - `chatbot-api` for the Python API
 - `chatbot-ui` for the Nginx-served website
 
+The chatbot API is available through the UI proxy:
+
+```powershell
+curl http://127.0.0.1:8085/api/health
+curl -X POST http://127.0.0.1:8085/api/chat -H "Content-Type: application/json" -d "{\"message\":\"What is energy?\"}"
+```
+
+Ollama is also exposed directly for testing:
+
+```powershell
+curl http://127.0.0.1:11435/api/tags
+curl -X POST http://127.0.0.1:11435/api/generate -H "Content-Type: application/json" -d "{\"model\":\"llama3.2:1b\",\"prompt\":\"What is energy?\",\"stream\":false}"
+```
+
 The default model is `llama3.2:1b`. Change it before starting:
 
 ```powershell
