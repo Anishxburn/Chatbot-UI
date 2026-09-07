@@ -1,12 +1,46 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    expose:
+      - "11434"
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama-data:/root/.ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull $$OLLAMA_MODEL"]
+    restart: "no"
+
   chatbot-api:
     build:
       context: ../AI-Server
     image: chatbot-api:local
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     environment:
       CHATBOT_HOST: 0.0.0.0
       CHATBOT_PORT: 8000
       CHATBOT_ALLOWED_ORIGINS: http://localhost:8085,http://127.0.0.1:8085
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
     expose:
       - "8000"
     healthcheck:
@@ -25,3 +59,6 @@ services:
         condition: service_healthy
     ports:
       - "${CHATBOT_UI_PORT:-8085}:80"
+
+volumes:
+  ollama-data:
