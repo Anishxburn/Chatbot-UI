@@ -7,24 +7,60 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <header class="header">
-        <div>
-          <p class="eyebrow">CHATBOT UI</p>
-          <h1>Talk to your local AI service.</h1>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="Chat settings">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <div>
+            <p>Chatbot UI</p>
+            <span>Local assistant workspace</span>
+          </div>
         </div>
-        <span id="status" class="status">Checking service...</span>
-      </header>
 
-      <section id="messages" class="messages" aria-live="polite">
-        <article class="message assistant">Send a message to start the conversation.</article>
+        <section class="panel">
+          <h2>Service</h2>
+          <div class="service-row">
+            <span id="status-dot" class="status-dot"></span>
+            <span id="status">Checking AI-Server...</span>
+          </div>
+          <p class="muted">Connected to <code>127.0.0.1:8000</code></p>
+        </section>
+
+        <section class="panel">
+          <h2>Try a Prompt</h2>
+          <div class="prompt-list">
+            <button class="prompt" type="button">Summarize the chatbot stack</button>
+            <button class="prompt" type="button">Draft a friendly welcome message</button>
+            <button class="prompt" type="button">Give me three UI improvement ideas</button>
+          </div>
+        </section>
+      </aside>
+
+      <section class="chat-window" aria-label="Chatbot conversation">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">AI ASSISTANT</p>
+            <h1>Ask, test, and refine your chatbot.</h1>
+          </div>
+          <button id="clear-chat" class="ghost-button" type="button">Clear</button>
+        </header>
+
+        <section id="messages" class="messages" aria-live="polite">
+          <article class="message assistant">
+            <span class="avatar">AI</span>
+            <div class="bubble">
+              <strong>Ready when you are.</strong>
+              <p>Send a message and I will route it to your local AI service.</p>
+            </div>
+          </article>
+        </section>
+
+        <form id="chat-form" class="composer">
+          <label class="sr-only" for="message">Message</label>
+          <textarea id="message" name="message" rows="1" autocomplete="off" placeholder="Type your message..." required></textarea>
+          <button id="send-button" type="submit">Send</button>
+        </form>
       </section>
-
-      <form id="chat-form" class="composer">
-        <label class="sr-only" for="message">Message</label>
-        <input id="message" name="message" autocomplete="off" placeholder="Ask something..." required />
-        <button type="submit">Send</button>
-      </form>
     </main>
     <script src="app.js"></script>
   </body>

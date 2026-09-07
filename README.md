@@ -1,8 +1,6 @@
-# Chatbot-UI
+# Chatbot UI
 
-Chatbot UI
-
-Dependency-free browser client for `AI-Server`.
+Dependency-free browser client for `AI-Server` with a responsive chat layout, quick prompts, service status, and typing state.
 
 ## Run
 
