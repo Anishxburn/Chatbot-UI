@@ -1,0 +1,27 @@
+services:
+  chatbot-api:
+    build:
+      context: ../AI-Server
+    image: chatbot-api:local
+    environment:
+      CHATBOT_HOST: 0.0.0.0
+      CHATBOT_PORT: 8000
+      CHATBOT_ALLOWED_ORIGINS: http://localhost:8085,http://127.0.0.1:8085
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  chatbot-ui:
+    build:
+      context: .
+    image: chatbot-ui:local
+    depends_on:
+      chatbot-api:
+        condition: service_healthy
+    ports:
+      - "${CHATBOT_UI_PORT:-8085}:80"
