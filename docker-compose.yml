@@ -42,8 +42,8 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-r1:7b}
-      CHAT_MODEL: ${CHAT_MODEL:-deepseek-r1:7b}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-r1:1.5b}
+      CHAT_MODEL: ${CHAT_MODEL:-deepseek-r1:1.5b}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
     entrypoint: ["/bin/sh", "-c"]
     command: ["ollama pull $$OLLAMA_MODEL && ollama pull $$DEEPSEEK_MODEL && ollama pull $$CHAT_MODEL && ollama pull $$EMBEDDING_MODEL"]
@@ -66,8 +66,8 @@ services:
       CHATBOT_ALLOWED_ORIGINS: http://localhost:8085,http://127.0.0.1:8085
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-r1:7b}
-      CHAT_MODEL: ${CHAT_MODEL:-deepseek-r1:7b}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-r1:1.5b}
+      CHAT_MODEL: ${CHAT_MODEL:-deepseek-r1:1.5b}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
     expose:
@@ -94,8 +94,8 @@ services:
       CHATBOT_ALLOWED_ORIGINS: http://localhost:8085,http://127.0.0.1:8085
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-r1:7b}
-      CHAT_MODEL: ${CHAT_MODEL:-deepseek-r1:7b}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-r1:1.5b}
+      CHAT_MODEL: ${CHAT_MODEL:-deepseek-r1:1.5b}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
     ports:
