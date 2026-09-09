@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-chatbot}
+      POSTGRES_USER: ${POSTGRES_USER:-chatbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatbot}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../AI-Server/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   ollama:
     image: ollama/ollama:latest
     volumes:
@@ -23,9 +39,10 @@ services:
       - ollama-data:/root/.ollama
     environment:
       OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
     entrypoint: ["/bin/sh", "-c"]
-    command: ["ollama pull $$OLLAMA_MODEL"]
+    command: ["ollama pull $$OLLAMA_MODEL && ollama pull $$EMBEDDING_MODEL"]
     restart: "no"
 
   chatbot-api:
@@ -33,6 +50,8 @@ services:
       context: ../AI-Server
     image: chatbot-api:local
     depends_on:
+      postgres:
+        condition: service_healthy
       ollama:
         condition: service_healthy
       ollama-init:
@@ -42,7 +61,9 @@ services:
       CHATBOT_PORT: 8000
       CHATBOT_ALLOWED_ORIGINS: http://localhost:8085,http://127.0.0.1:8085
       OLLAMA_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:1b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
     expose:
       - "8000"
     healthcheck:
@@ -64,3 +85,4 @@ services:
 
 volumes:
   ollama-data:
+  postgres-data:
