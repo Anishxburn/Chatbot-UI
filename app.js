@@ -8,7 +8,7 @@ const sendButton = document.querySelector("#send-button");
 const clearChat = document.querySelector("#clear-chat");
 const promptButtons = document.querySelectorAll(".prompt");
 
-function addMessage(text, role) {
+function addMessage(text, role, meta = {}) {
   const message = document.createElement("article");
   message.className = `message ${role}`;
 
@@ -20,10 +20,57 @@ function addMessage(text, role) {
   bubble.className = "bubble";
   bubble.textContent = text;
 
+  if (role === "assistant" && Array.isArray(meta.agentTrace) && meta.agentTrace.length > 0) {
+    bubble.append(createFlowDetails(meta.agentTrace, meta.sources));
+  }
+
   message.append(avatar, bubble);
   messages.append(message);
   messages.scrollTop = messages.scrollHeight;
   return message;
+}
+
+function createFlowDetails(agentTrace, sources = []) {
+  const details = document.createElement("details");
+  details.className = "flow-details";
+
+  const summary = document.createElement("summary");
+  summary.textContent = "System flow";
+  details.append(summary);
+
+  const list = document.createElement("ol");
+  list.className = "flow-list";
+
+  agentTrace.forEach((step) => {
+    const item = document.createElement("li");
+    const title = document.createElement("strong");
+    title.textContent = `${step.agent}: ${step.status}`;
+    const detail = document.createElement("span");
+    detail.textContent = step.detail;
+    item.append(title, detail);
+    list.append(item);
+  });
+
+  details.append(list);
+
+  if (Array.isArray(sources) && sources.length > 0) {
+    const sourceTitle = document.createElement("p");
+    sourceTitle.className = "flow-source-title";
+    sourceTitle.textContent = "Sources";
+    details.append(sourceTitle);
+
+    const sourceList = document.createElement("ul");
+    sourceList.className = "source-list";
+    sources.forEach((source) => {
+      const item = document.createElement("li");
+      const score = Number(source.score || 0).toFixed(2);
+      item.textContent = `${source.title || "EMS Library"} (${source.standard_name || "general"}, score ${score})`;
+      sourceList.append(item);
+    });
+    details.append(sourceList);
+  }
+
+  return details;
 }
 
 function setBusy(isBusy) {
@@ -70,7 +117,10 @@ async function sendMessage(message) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Request failed");
     typing.remove();
-    addMessage(data.reply, "assistant");
+    addMessage(data.reply, "assistant", {
+      agentTrace: data.agent_trace,
+      sources: data.sources,
+    });
   } catch (error) {
     typing.remove();
     addMessage(`Could not reach AI-Server: ${error.message}`, "error");
