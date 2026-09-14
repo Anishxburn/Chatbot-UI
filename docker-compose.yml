@@ -71,7 +71,7 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
       DAXVIEW_MCP_ENABLED: ${DAXVIEW_MCP_ENABLED:-false}
-      DAXVIEW_MCP_URL: ${DAXVIEW_MCP_URL:-http://host.docker.internal:8001/mcp}
+      DAXVIEW_MCP_URL: ${DAXVIEW_MCP_URL:-http://192.228.0.109:8001/mcp}
       DAXVIEW_MCP_TIMEOUT: ${DAXVIEW_MCP_TIMEOUT:-20}
     expose:
       - "8000"
@@ -102,7 +102,7 @@ services:
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
       DAXVIEW_MCP_ENABLED: ${DAXVIEW_MCP_ENABLED:-false}
-      DAXVIEW_MCP_URL: ${DAXVIEW_MCP_URL:-http://host.docker.internal:8001/mcp}
+      DAXVIEW_MCP_URL: ${DAXVIEW_MCP_URL:-http://192.228.0.109:8001/mcp}
       DAXVIEW_MCP_TIMEOUT: ${DAXVIEW_MCP_TIMEOUT:-20}
     ports:
       - "${AGENT_POC_PORT:-8091}:8000"
