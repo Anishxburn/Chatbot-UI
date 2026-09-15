@@ -53,6 +53,8 @@ services:
     build:
       context: ../AI-Server
     image: chatbot-api:local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,6 +100,8 @@ services:
 
   agent-poc-api:
     image: chatbot-api:local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
