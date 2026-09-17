@@ -99,6 +99,8 @@ services:
       start_period: 5s
 
   agent-poc-api:
+    build:
+      context: ../AI-Server
     image: chatbot-api:local
     extra_hosts:
       - "host.docker.internal:host-gateway"
