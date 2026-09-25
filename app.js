@@ -20,8 +20,11 @@ function addMessage(text, role, meta = {}) {
   bubble.className = "bubble";
   bubble.textContent = text;
 
-  if (role === "assistant" && Array.isArray(meta.agentTrace) && meta.agentTrace.length > 0) {
-    bubble.append(createFlowDetails(meta.agentTrace, meta.sources));
+  const hasAgentTrace = Array.isArray(meta.agentTrace) && meta.agentTrace.length > 0;
+  const hasSources = Array.isArray(meta.sources) && meta.sources.length > 0;
+  const hasComplianceContext = Array.isArray(meta.complianceContext) && meta.complianceContext.length > 0;
+  if (role === "assistant" && (hasAgentTrace || hasSources || hasComplianceContext)) {
+    bubble.append(createFlowDetails(meta.agentTrace || [], meta.sources || [], meta.complianceContext || []));
   }
 
   message.append(avatar, bubble);
@@ -30,12 +33,12 @@ function addMessage(text, role, meta = {}) {
   return message;
 }
 
-function createFlowDetails(agentTrace, sources = []) {
+function createFlowDetails(agentTrace, sources = [], complianceContext = []) {
   const details = document.createElement("details");
   details.className = "flow-details";
 
   const summary = document.createElement("summary");
-  summary.textContent = "System flow";
+  summary.textContent = agentTrace.length > 0 ? "System flow" : "Details";
   details.append(summary);
 
   const list = document.createElement("ol");
@@ -51,7 +54,28 @@ function createFlowDetails(agentTrace, sources = []) {
     list.append(item);
   });
 
-  details.append(list);
+  if (agentTrace.length > 0) {
+    details.append(list);
+  }
+
+  if (Array.isArray(complianceContext) && complianceContext.length > 0) {
+    const complianceTitle = document.createElement("p");
+    complianceTitle.className = "flow-source-title";
+    complianceTitle.textContent = "Compliance context";
+    details.append(complianceTitle);
+
+    const complianceList = document.createElement("ul");
+    complianceList.className = "source-list";
+    complianceContext.forEach((item) => {
+      const row = document.createElement("li");
+      const label = item.label || "Context";
+      const standard = item.standard || "standard not specified";
+      const note = item.note || "";
+      row.textContent = `${label}: ${standard}${note ? ` - ${note}` : ""}`;
+      complianceList.append(row);
+    });
+    details.append(complianceList);
+  }
 
   if (Array.isArray(sources) && sources.length > 0) {
     const sourceTitle = document.createElement("p");
@@ -120,6 +144,7 @@ async function sendMessage(message) {
     addMessage(data.reply, "assistant", {
       agentTrace: data.agent_trace,
       sources: data.sources,
+      complianceContext: data.compliance_context,
     });
   } catch (error) {
     typing.remove();
