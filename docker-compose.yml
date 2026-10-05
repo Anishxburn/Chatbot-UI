@@ -78,8 +78,11 @@ services:
       OLLAMA_EMBEDDING_TIMEOUT: ${OLLAMA_EMBEDDING_TIMEOUT:-30}
       DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
       CHATBOT_TRACE_LIMIT: ${CHATBOT_TRACE_LIMIT:-200}
-      AI_DEBUG_DASHBOARD_ENABLED: ${AI_DEBUG_DASHBOARD_ENABLED:-false}
-      AI_DEBUG_DASHBOARD_KEY: ${AI_DEBUG_DASHBOARD_KEY:-}
+      AI_DEBUG_DASHBOARD_ENABLED: ${AI_DEBUG_DASHBOARD_ENABLED:-true}
+      AI_PREDICTION_DATA_DIR: /app/prediction-data
+      AI_PREDICTION_SOURCE_URL: ${AI_PREDICTION_SOURCE_URL:-}
+      AI_PREDICTION_SOURCE_TOKEN: ${AI_PREDICTION_SOURCE_TOKEN:-}
+      AI_PREDICTION_SITES_JSON: ${AI_PREDICTION_SITES_JSON:-[]}
       AI_REFINE_MCP_WITH_MODEL: ${AI_REFINE_MCP_WITH_MODEL:-true}
       AI_COMPARE_MODEL_ENABLED: ${AI_COMPARE_MODEL_ENABLED:-false}
       AI_COMPARE_MODEL: ${AI_COMPARE_MODEL:-deepseek-r1:1.5b}
@@ -105,6 +108,8 @@ services:
       DAXVIEW_MCP_DEBUG_RESPONSE_LIMIT: ${DAXVIEW_MCP_DEBUG_RESPONSE_LIMIT:-4000}
     expose:
       - "8000"
+    volumes:
+      - prediction-data:/app/prediction-data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
       interval: 10s
@@ -139,8 +144,11 @@ services:
       OLLAMA_EMBEDDING_TIMEOUT: ${OLLAMA_EMBEDDING_TIMEOUT:-30}
       DATABASE_URL: postgresql://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-chatbot}@postgres:5432/${POSTGRES_DB:-chatbot}
       CHATBOT_TRACE_LIMIT: ${CHATBOT_TRACE_LIMIT:-200}
-      AI_DEBUG_DASHBOARD_ENABLED: ${AI_DEBUG_DASHBOARD_ENABLED:-false}
-      AI_DEBUG_DASHBOARD_KEY: ${AI_DEBUG_DASHBOARD_KEY:-}
+      AI_DEBUG_DASHBOARD_ENABLED: ${AI_DEBUG_DASHBOARD_ENABLED:-true}
+      AI_PREDICTION_DATA_DIR: /app/prediction-data
+      AI_PREDICTION_SOURCE_URL: ${AI_PREDICTION_SOURCE_URL:-}
+      AI_PREDICTION_SOURCE_TOKEN: ${AI_PREDICTION_SOURCE_TOKEN:-}
+      AI_PREDICTION_SITES_JSON: ${AI_PREDICTION_SITES_JSON:-[]}
       AI_REFINE_MCP_WITH_MODEL: ${AI_REFINE_MCP_WITH_MODEL:-true}
       AI_COMPARE_MODEL_ENABLED: ${AI_COMPARE_MODEL_ENABLED:-false}
       AI_COMPARE_MODEL: ${AI_COMPARE_MODEL:-deepseek-r1:1.5b}
@@ -166,6 +174,8 @@ services:
       DAXVIEW_MCP_DEBUG_RESPONSE_LIMIT: ${DAXVIEW_MCP_DEBUG_RESPONSE_LIMIT:-4000}
     ports:
       - "${AGENT_POC_PORT:-8091}:8000"
+    volumes:
+      - prediction-data:/app/prediction-data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
       interval: 10s
@@ -187,3 +197,4 @@ services:
 volumes:
   ollama-data:
   postgres-data:
+  prediction-data:
