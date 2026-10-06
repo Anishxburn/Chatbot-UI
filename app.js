@@ -7,9 +7,6 @@ const statusDot = document.querySelector("#status-dot");
 const sendButton = document.querySelector("#send-button");
 const clearChat = document.querySelector("#clear-chat");
 const promptButtons = document.querySelectorAll(".prompt");
-const CHAT_SESSION_KEY = "chatbot-ui-session-id";
-let sessionId = localStorage.getItem(CHAT_SESSION_KEY) || crypto.randomUUID();
-localStorage.setItem(CHAT_SESSION_KEY, sessionId);
 
 function addMessage(text, role, meta = {}) {
   const message = document.createElement("article");
@@ -139,14 +136,10 @@ async function sendMessage(message) {
     const response = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, session_id: sessionId }),
+      body: JSON.stringify({ message }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Request failed");
-    if (data.session_id) {
-      sessionId = data.session_id;
-      localStorage.setItem(CHAT_SESSION_KEY, sessionId);
-    }
     typing.remove();
     addMessage(data.reply, "assistant", {
       agentTrace: data.agent_trace,
@@ -178,8 +171,6 @@ input.addEventListener("keydown", (event) => {
 
 clearChat.addEventListener("click", () => {
   messages.innerHTML = "";
-  sessionId = crypto.randomUUID();
-  localStorage.setItem(CHAT_SESSION_KEY, sessionId);
   addMessage("Chat cleared. Send a fresh message whenever you are ready.", "assistant");
   input.focus();
 });
