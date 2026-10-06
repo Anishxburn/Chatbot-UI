@@ -52,6 +52,16 @@ MODELS = [
     ("Vague device follow-up", "Can you get max demand for the device?", "demand_peak_summary; then clarification/device selection if device is unspecified", "Asks for a device choice instead of guessing."),
 ]
 
+DIRECT_PROOF = [
+    ("List available MCP tools", "tools/list", "{}", "Confirms whether the deployed DaxView MCP exposes all expected tools, including voltage/current-capable telemetry."),
+    ("Direct site metadata", "site_metadata_summary", '{"authorization_id":"<auth>","site_id":<site_id>}', "Proves read access and site scope before testing historical metrics."),
+    ("Direct demand peak", "demand_peak_summary", '{"authorization_id":"<auth>","site_id":<site_id>,"start_time":"<iso>","end_time":"<iso>","timezone":"Asia/Kuala_Lumpur"}', "If this returns NO_DATA, test the telemetry fallback below."),
+    ("Manual demand fallback source", "telemetry_timeseries", '{"authorization_id":"<auth>","site_id":<site_id>,"metric":"demand","start_time":"<iso>","end_time":"<iso>","bucket":"1h","aggregation":"auto","limit":1000}', "Use max(value/demand_kw/kw) from returned rows as fallback evidence."),
+    ("Voltage availability", "telemetry_timeseries", '{"authorization_id":"<auth>","device_id":<device_id>,"metric":"voltage","start_time":"<iso>","end_time":"<iso>","bucket":"1h","aggregation":"auto","limit":500}', "Records whether voltage is accepted and whether rows contain voltage values."),
+    ("Current availability", "telemetry_timeseries", '{"authorization_id":"<auth>","device_id":<device_id>,"metric":"current","start_time":"<iso>","end_time":"<iso>","bucket":"1h","aggregation":"auto","limit":500}', "Records whether current is accepted and whether rows contain current values."),
+    ("Metric coverage check", "data_availability_summary", '{"authorization_id":"<auth>","site_id":<site_id>,"metric":"voltage","start_time":"<iso>","end_time":"<iso>","timezone":"Asia/Kuala_Lumpur"}', "If supported, proves missing voltage data separately from unsupported telemetry."),
+]
+
 
 def add_table_sheet(wb, title, headers, rows, widths, table_name):
     ws = wb.create_sheet(title)
@@ -144,6 +154,16 @@ def main():
     )
     for column in ("F", "G", "H", "J", "K", "L"):
         add_list_validation(ws, column, ["1", "2", "3", "4", "5"])
+
+    proof_rows = [(name, method, payload, evidence, "Not tested", "", "", "", "") for name, method, payload, evidence in DIRECT_PROOF]
+    ws = add_table_sheet(
+        wb, "Direct MCP Proof",
+        ["Proof case", "MCP method/tool", "Payload template", "Evidence to capture", "Status", "Accepted?", "Rows/data?", "Error/code", "Notes / trace ID"],
+        proof_rows, [28, 28, 82, 58, 18, 16, 16, 28, 48], "DirectMcpProof",
+    )
+    add_list_validation(ws, "E", ["Not tested", "Pass", "Fail", "Blocked", "Tool unavailable"])
+    add_list_validation(ws, "F", ["Yes", "No", "N/A"])
+    add_list_validation(ws, "G", ["Yes", "No", "Partial", "N/A"])
 
     log_headers = ["Date/time", "Tester", "Question", "Expected tool(s)", "Actual tool(s)", "Arguments correct?", "MCP status", "Data result", "Primary model", "Primary score (1-5)", "Compare model", "Compare score (1-5)", "Chart expected?", "Chart shown?", "Latency (s)", "Overall result", "Notes / trace ID"]
     ws = add_table_sheet(wb, "Run Log", log_headers, [[""] * len(log_headers) for _ in range(30)], [22, 20, 68, 42, 42, 20, 18, 18, 22, 20, 22, 20, 18, 18, 16, 18, 48], "RunLog")
