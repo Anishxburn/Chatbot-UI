@@ -1,53 +1,229 @@
-# EMS MCP Developer Handoff: Device Data, Alarms, and Site Summary
+# EMS MCP Database Mapping and Tool Specification
 
 ## Purpose
 
-Build a small, predictable MCP interface for the DaxView EMS chatbot. The chatbot should have three top-level choices:
+Build a simple MCP interface for the EMS chatbot that returns clean, numeric, correctly sourced data. This document is a database and implementation handoff for the developer.
 
-1. `get_device_data` — device identity/configuration, supported metrics, and bounded historical telemetry.
-2. `get_alarm_data` — current alarm state, historical alarm counts, and one alarm's stored details.
-3. `get_site_summary` — site/building overview and compact energy summary.
+The chatbot should expose these three model-facing tools:
 
-The AI Server may rank returned devices and perform transparent calculations from returned numeric rows. DaxView remains responsible for identity/scope authorization, canonical metric mapping, units, cumulative-energy-to-consumption conversion, and demand semantics. Do not ask the LLM to calculate from prose or raw cumulative counters.
+1. `get_device_data` — device detail, available metrics, and requested historical values.
+2. `get_alarm_data` — active alarms, historical alarm counts, and alarm details.
+3. `get_site_summary` — site/building overview and site energy series.
 
-This handoff is based on the current V2 source tree. It proposes reducing the model-facing MCP tool names; each `operation` below must still map to a separately reviewed capability and authorization schema in V2. It does not authorize bypassing V2's data-plan flow or querying storage from MCP.
+The AI Server can rank and calculate from the returned numeric rows. It must not guess table names, metric columns, units, or whether an energy value is a cumulative counter. Return source data in a structured format with enough metadata for deterministic code to calculate correctly.
 
-## Keep The V2 Authorization Protocol
+## Scope Of This Request
 
-1. AI Server selects a top-level MCP tool and a specific operation.
-2. AI Server submits that operation and proposed arguments to V2's data-plan endpoint.
-3. V2 validates the turn, user permission, site/device scope, operation, and arguments. It returns `authorization_id` and normalized arguments.
-4. AI Server calls the corresponding MCP tool with the authorization ID and the exact normalized arguments.
-5. MCP validates the capability and calls the fixed V2 historical execution endpoint.
-6. Django atomically validates and consumes the authorization, then uses canonical V2 services to return bounded structured data.
+This request is to simplify and make precise the MCP tool surface and its database mappings. The current AI Server, Chatbot UI, and DaxView integration are already working and should remain unchanged unless a separate change is explicitly agreed.
 
-The MCP call must not add, remove, default, rename, or remap fields after the data-plan response. Authorization is operation- and argument-bound and single-use. A follow-up or second data operation needs a new plan and authorization.
+This is a specification for the MCP developer. It does not request redesign of the AI Server ↔ DaxView authorization/callback protocol. The developer must preserve the current working integration contract and confirm the exact deployed MCP request path before implementation.
 
-## Proposed MCP Tool 1: `get_device_data`
+MCP must remain a narrow read-only interface. Never accept SQL, table names, column names, HTTP paths, or arbitrary filters from the LLM. The user/model chooses a named operation and approved metric; server code resolves that to trusted mappings.
 
-### Purpose
+## Tool Count Recommendation
 
-One discoverable tool for device questions. The required `operation` tells the gateway what kind of device data is requested. It is not an unrestricted SQL tool or a request to return every row for every device.
+Three top-level tools are recommended:
 
-### Operations
+| Tool | Reason to keep separate |
+|---|---|
+| `get_device_data` | Device telemetry is high-volume, metric- and time-range-specific data. |
+| `get_alarm_data` | Alarm records have a different event lifecycle and query shape. |
+| `get_site_summary` | Site overview and energy buckets are small, common summary requests. |
 
-| Operation | Use | Time range |
+If the team wants exactly two tools, fold the `overview` and `energy_series` operations into `get_device_data`. Do not merge alarm events into device telemetry responses. The operation must remain explicit either way.
+
+The names above are the MCP-facing tools. Each tool can have a small, explicit `operation` enum. This reduces tool-selection noise without creating an unrestricted “fetch everything” endpoint.
+
+## Database Source Map: Device And Telemetry Data
+
+### Device identity and details
+
+| Returned field | V2 table.column | Notes |
 |---|---|---|
-| `inventory` | List device details in a site/building, with freshness and configuration | None |
-| `metric_catalog` | List configured metrics and observed availability for devices | Optional bounded historical window |
-| `timeseries` | Return values for one device and one or more requested metrics | Required bounded historical window |
-| `energy_ranking_data` | Return canonical per-device energy rows for the requested window; AI Server may sort/rank them | Required bounded historical window |
+| `device_id` | `public.org_device.device_id` | Stable device identifier. |
+| `device_name` | `public.org_device.name` | Human-readable device name. |
+| `site_id` | `public.org_device.site_id` | Scope device to site. |
+| `protocol_id` | `public.org_device.protocol_id` | Protocol selects the telemetry source/config table. |
+| `device_type` | `public.org_protocol.name`, joined by `org_device.protocol_id = org_protocol.id` | Examples include MQTT, Modbus, Virtual, Manual; use actual configured values. |
+| `template_id` | `public.org_device.template_id` | Joins device metadata to template. |
+| `manufacturer` | `public.device_template.json_data ->> 'manufacturer'` or `->> 'brand'` | Nullable JSON configuration; don't infer from name. |
+| `meter_model` | `public.device_template.json_data ->> 'meter_model'` or `->> 'model'`; fallback `device_template.template_name` | Nullable. |
+| `configured_status` | `public.org_device.status` | Configuration/status label only; not sufficient to determine data freshness. |
+| `data_status` | `public.org_device.data_status` | Useful context; derive online/stale/offline from last seen as well. |
+| `expected_reporting_interval_seconds` | `public.org_device.expected_reporting_interval_seconds` | MQTT/default may use 60s, others 300s; virtual may use config interval. |
+| `virtual_unit_id` | `public.org_device.virtual_unit_id` | For virtual source mapping. |
+| `decommissioned_at` | `public.org_device.decommissioned_at` | Exclude decommissioned devices from active inventory by default. |
+| `building_id` | `public.org_device_location.building_id`, or `org_floor.building_id` via `floor_id` | Use current effective location (`effective_to IS NULL`), prefer `is_primary`, latest `effective_from`. |
+| `building_name` | `public.org_building.name` | Join using resolved building ID. |
+| `floor_id` / `floor_name` | `public.org_device_location.floor_id` → `public.org_floor.floor_id/name` | Only include if requested; floor assignment may be null. |
+| `last_seen` | `MAX(timestamp)` from protocol's ETL source table | Query correct source by protocol and identifier; do not rely only on static status. |
 
-Do not include live telemetry, Redis snapshots, commands, or controls. A persisted “latest reading” operation should be added only if V2 confirms it reads the approved historical store and the capability is explicitly reviewed.
+For device location, use the same effective-location selection pattern as V2 code. A device may have historical location rows; joining every row can duplicate inventory or energy results.
 
-### Request schema
+### Protocol configuration: which metric columns are configured
+
+Do not assume every device supports every metric. The configuration tables determine which parameter names are enabled for ETL.
+
+| Device protocol | Config table | Identifying key | Metric/config fields |
+|---|---|---|---|
+| MQTT (`protocol_id=1`) | `public.config_mqtt_parameter` | `device_id` | `parameter`, `is_etl_enabled`; check the deployed schema for effective dates/unit fields. |
+| Modbus (`protocol_id=2`) | `public.config_modbus_parameter` | `device_id` | `parameter`, `is_etl_enabled`; check the deployed schema for effective dates/unit fields. |
+| Virtual (`protocol_id=3`) | `public.config_virtual_parameter` | `virtual_id` matched to `org_device.virtual_unit_id` | `parameter`, `is_etl_enabled`, `etl_interval_minutes`. |
+| Manual (`protocol_id=4`) | `public.config_manual_parameter` | `device_id` | `parameter`; imported values are in `manual_telemetry_point`. Verify active/configuration fields in deployed schema. |
+
+### Telemetry value tables and exact common columns
+
+For MQTT and Modbus devices, commonly used metrics are wide numeric columns in their respective ETL tables. The checked-in V2 schema contains these columns:
+
+| Meaning / returned metric | MQTT table.column | Modbus table.column | Virtual table.column | Unit guidance |
+|---|---|---|---|---|
+| Sample time | `etl_mqtt.timestamp` | `etl_modbus.timestamp` | `etl_virtual.timestamp` | Timestamp with timezone. |
+| Device key | `etl_mqtt.device_id` | `etl_modbus.device_id` | `etl_virtual.virtual_id` | Virtual uses `org_device.virtual_unit_id`, not device ID, to query samples. |
+| Site key | `etl_mqtt.site_id` | `etl_modbus.site_id` | Verify deployed schema | Still apply authorized `org_device.site_id` scope. |
+| Voltage phase L1-N | `voltage_l1_n` | `voltage_l1_n` | `voltage_l1_n` | Commonly V; use configured/unit metadata where available. |
+| Voltage phase L2-N | `voltage_l2_n` | `voltage_l2_n` | `voltage_l2_n` | Commonly V. |
+| Voltage phase L3-N | `voltage_l3_n` | `voltage_l3_n` | `voltage_l3_n` | Commonly V. |
+| Voltage L1-L2 | `voltage_l1_l2` | `voltage_l1_l2` | `voltage_l1_l2` | Commonly V. |
+| Voltage L2-L3 | `voltage_l2_l3` | `voltage_l2_l3` | `voltage_l2_l3` | Commonly V. |
+| Voltage L3-L1 | `voltage_l3_l1` | `voltage_l3_l1` | `voltage_l3_l1` | Commonly V. |
+| Current phase L1 | `current_l1` | `current_l1` | `current_l1` | Commonly A. |
+| Current phase L2 | `current_l2` | `current_l2` | `current_l2` | Commonly A. |
+| Current phase L3 | `current_l3` | `current_l3` | `current_l3` | Commonly A. |
+| Neutral current | `neutral_current` | `neutral_current` | `neutral_current` | Commonly A. |
+| Active power total | `active_power_total` | `active_power_total` | `active_power_total` | Commonly kW; confirm scaling/unit configuration. |
+| Active power phases | `active_power_l1/l2/l3` | `active_power_l1/l2/l3` | `active_power_l1/l2/l3` | Commonly kW; keep phase separate. |
+| Reactive power total/phases | `reactive_power_total`, `_l1`, `_l2`, `_l3` | Same named columns | Same named columns | Usually kvar; confirm metadata. |
+| Apparent power total/phases | `apparent_power_total`, `_l1`, `_l2`, `_l3` | Same named columns | Same named columns | Usually kVA; confirm metadata. |
+| Power factor total/phases | `power_factor_total`, `_l1`, `_l2`, `_l3` | Same named columns | Same named columns | Dimensionless. |
+| Frequency | `frequency` | `frequency` | `frequency` | Usually Hz. |
+| THD voltage phase values | `thd_voltage_l1/l2/l3`; aliases `thd_u_l1/l2/l3` exist | Same named columns | Same named columns | Percentage or ratio depends on meter/config. Do not assume scaling. |
+| THD current phase values | `thd_current_l1/l2/l3`; aliases `thd_i_l1/l2/l3` exist | Same named columns | Same named columns | Percentage or ratio depends on meter/config. |
+| Active energy register | `active_energy_consumed_total`, `active_energy_consume` | `active_energy_consumed_total`, `active_energy_consume` | Same named columns | These may be cumulative counters. Do not sum as consumption. |
+| Generic virtual/manual value | Not applicable | Not applicable | `etl_virtual.value`; manual uses `manual_telemetry_point.value` keyed by parameter | Meaning/unit comes from configured parameter metadata. |
+| Estimated marker | `etl_mqtt.is_estimated` | `etl_modbus.is_estimated` | `etl_virtual.is_estimated` | Preserve if present; do not present estimated data as measured. |
+
+The `etl_virtual` table in `cold_schema.sql` includes the listed metric columns, but verify the exact deployed version. Manual point tables are long-form: one row per `device_id`, `parameter`, and `timestamp`, with numeric `value`.
+
+The source parameter is not necessarily the output column name users say. Example: “voltage” may map to several configured phase columns (`voltage_l1_n`, `voltage_l2_n`, `voltage_l3_n`); return each phase as a separate series, or ask which phase if the user expects a single value.
+
+### Metric resolution rule
+
+Resolve a requested metric against the device's configured `parameter` in the protocol-specific configuration table. Use the registered parameter-to-column mapping. Then query the protocol's ETL table using that resolved, trusted column identifier.
+
+V2 already implements this logic in `apps/enms/services/data_quality.py::resolve_series()`. It returns `SeriesDefinition` fields including:
+
+- `source_table` — `etl_mqtt`, `etl_modbus`, `etl_virtual`, or supported source;
+- `id_column` — usually `device_id` or `virtual_id`;
+- `entity_id` — device or virtual entity key;
+- `requested_parameter` and `resolved_value_column`;
+- `canonical_parameter`;
+- `base_unit`, `effective_unit`, configured prefix, and calibration formula;
+- `value_mode`, interval, effective dates, and semantic revision.
+
+This is the most precise source-of-truth mapping in the repository. The MCP developer should reproduce its *behavior* through an approved server-side resolver or use the corresponding DaxView data service. Do not copy a small hard-coded metric list and assume it covers every installed meter. Do not interpolate an unvalidated model-provided string into SQL.
+
+### Table/column discovery queries for developer verification
+
+Run these against the actual V2 database before finalizing the mapping. These are developer inspection queries only; do not expose arbitrary SQL through MCP.
+
+```sql
+-- Confirm actual columns for source tables in the deployed database.
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name IN (
+    'org_device', 'org_protocol', 'device_template', 'org_device_location',
+    'org_building', 'org_floor', 'config_mqtt_parameter',
+    'config_modbus_parameter', 'config_virtual_parameter',
+    'config_manual_parameter', 'etl_mqtt', 'etl_modbus', 'etl_virtual',
+    'manual_telemetry_point', 'alarm_events', 'alarm_event_active',
+    'alarm_event_acknowlegde', 'alarm_event_resolved', 'alarm_event_closed'
+  )
+ORDER BY table_name, ordinal_position;
+
+-- Inspect enabled configured parameter names (scope by a specific device).
+SELECT parameter, is_etl_enabled
+FROM public.config_modbus_parameter
+WHERE device_id = :device_id
+ORDER BY parameter;
+
+-- Inspect actual populated ETL columns for a specific Modbus device.
+SELECT timestamp, voltage_l1_n, current_l1, active_power_total,
+       active_energy_consumed_total, frequency
+FROM public.etl_modbus
+WHERE device_id = :device_id
+  AND timestamp >= :start_time AND timestamp < :end_time
+ORDER BY timestamp
+LIMIT 100;
+```
+
+Repeat parameter inspection against the correct protocol config table and source table. Never use the example SQL without confirming the device's protocol and metric configuration first.
+
+## Database Source Map: Alarms
+
+| Returned field | V2 table.column / join | Notes |
+|---|---|---|
+| Event ID | `public.alarm_events.event_id` | Unique lifecycle event identifier. |
+| Alarm ID | `public.alarm_events.alarm_id` | Definition/business alarm identifier; do not confuse with event ID. |
+| Site | `public.alarm_events.site_id` | Apply authorized site scope. |
+| Device | `public.alarm_events.device_id` | May be null for virtual alarm. |
+| Virtual source | `public.alarm_events.virtual_id` → `public.virtual_devices.virtual_id/virtual_name` | `org_device_virtual` can associate virtual IDs with physical devices. |
+| Alarm name/type | `alarm_events.raw_payload -> 'parsed' ->> 'alarm_name'`, fallback `alarm_events.alarm_type` | If absent, return `null` or “Alarm”; do not invent. |
+| Severity/state/source | `alarm_events.severity`, `.status`, `.source` | Preserve source values; normalize severity only under documented mapping. |
+| Details | `alarm_events.details`, `.raw_payload` | Return only safe, bounded, user-facing fields; don't dump arbitrary payloads wholesale. |
+| Started/created time | `alarm_events.created_at` | Return ISO-8601 with timezone. |
+| Active state | `public.alarm_event_active.event_id` | Join to identify active lifecycle. |
+| Acknowledged state/time | `public.alarm_event_acknowlegde.event_id`, `ack_at`, `ack_by`, `resolution_note` | Table spelling is as currently defined in V2. |
+| Resolved state/time | `public.alarm_event_resolved.event_id`, `resolved_at`, `resolved_by`, `resolution_note` | Lifecycle table. |
+| Closed state/time | `public.alarm_event_closed.event_id`, `close_at`, `close_by`, `resolution_note` | Lifecycle table. |
+
+For active alarms include active/acknowledged and exclude resolved/closed events. For historical frequency count event rows in the requested interval and group by a stable, non-null alarm type/name; include first and last seen. For detail, make the requested identifier explicit as `alarm_event_id` or `alarm_id`.
+
+## Database Source Map: Site Summary
+
+| Returned field | V2 table.column / service |
+|---|---|
+| Site ID/name | `public.org_site.site_id`, `.site_name` |
+| Company/project | `public.org_site.project_id` → `public.org_project.project_id/project_name` |
+| Site location | `org_site.address`, `.latitude`, `.longitude` |
+| Country/currency/timezone | `org_site.country_code`, `.currency_code`, `.billing_timezone` |
+| Buildings | `public.org_building.building_id`, `.site_id`, `.name`, `.is_active`, `.timezone` |
+| Active device count | `public.org_device` filtered by `site_id`, `decommissioned_at IS NULL`, and active lifecycle statuses |
+| Online/stale/offline count | Latest source timestamp by protocol plus expected report interval; do not rely on `org_device.status` alone |
+| Site energy buckets | Do not sum arbitrary raw ETL counters. Use the DaxView consumption source membership and canonical energy aggregation service described below. |
+
+## Canonical Energy And Demand Rules
+
+### Energy
+
+Raw ETL columns such as `active_energy_consumed_total` are likely counters/registers. Summing those readings gives the wrong consumption. For an energy-consumption query, use configured site source membership and DaxView's canonical consumption calculation. In V2 that logic is in `apps/core/consumption_engine.py` (`get_site_consumption_sources`, `aggregate_device_consumption_totals`, `aggregate_site_consumption_series_with_display`).
+
+Return:
+
+- `metric: "energy"`, `unit: "kWh"`, `value_mode: "consumption_delta"`;
+- requested range and timezone;
+- points or device rows with numeric values;
+- coverage/sample counts and whether data is partial/truncated;
+- source device IDs and names.
+
+The AI Server can sort these numeric rows to calculate top consumers. It must not calculate register deltas itself.
+
+### Demand
+
+Do not call `MAX(active_power_total)` “maximum demand” unless the device/business definition explicitly says that instantaneous active power is demand. Fixed-interval maximum demand is a separate semantic. Use the configured demand source/resolver and return its interval, unit (`kW`), timestamp, limit if available, and calculation basis. The LLM can explain or compare the returned values but must not reinterpret them.
+
+## Tool Contracts
+
+### 1. `get_device_data`
+
+Operations: `inventory`, `metric_catalog`, `timeseries`, `energy_rows`.
+
+Example telemetry request:
 
 ```json
 {
-  "authorization_id": "string",
   "operation": "timeseries",
   "site_id": 17,
-  "building_id": null,
   "device_id": 519,
   "metrics": ["voltage_l1_n", "current_l1", "active_power_total"],
   "start_time": "2026-10-01T00:00:00+08:00",
@@ -59,334 +235,62 @@ Do not include live telemetry, Redis snapshots, commands, or controls. A persist
 }
 ```
 
-Rules:
+Return each requested metric as a distinct series with `device_id`, `device_name`, `metric`, `source_metric`, `canonical_metric`, `phase`, `unit`, `value_mode`, `aggregation`, numeric points, sample count, coverage, and truncation. `inventory` returns device metadata; `metric_catalog` separates configured from observed metrics; `energy_rows` returns canonical consumption-delta rows without requiring MCP to rank them.
 
-- `operation` is required and must be one of the four listed operations.
-- `site_id` is resolved from trusted turn context when allowed by the V2 contract; explicit IDs must still pass V2 scope checks.
-- `device_id` is required for `timeseries`. A site-wide request must have an explicit bounded multi-device policy; do not silently turn one device query into all-device telemetry.
-- `metrics` contains canonical/configured metric names. Reject unknown metrics; never silently substitute another metric.
-- `start_time` and `end_time` are timezone-aware ISO-8601 values for historical operations. `end_time` must be after `start_time`, cannot be future/live, and the range cannot exceed the manifest's maximum (currently 366 days for the relevant V2 operations).
-- `bucket` and `aggregation` use a reviewed enum. `raw` output is separately bounded. Use a coarser bucket when the requested interval would exceed the point limit.
-- `limit` is capped server-side (the current telemetry capability is bounded at 2,000 points); never honor an unbounded client limit.
-- The schema is operation-specific. Reject irrelevant fields rather than accepting a single loose object for every operation.
+### 2. `get_alarm_data`
 
-### Device inventory response
+Operations: `active_summary`, `frequency`, `detail`.
+
+Example active request:
 
 ```json
 {
-  "success": true,
-  "site": {"site_id": 17, "site_name": "Example Site"},
-  "data": {
-    "devices": [
-      {
-        "device_id": 519,
-        "device_name": "Main Meter",
-        "site_id": 17,
-        "building_id": 4,
-        "building_name": "Plant Room",
-        "device_type": "Modbus",
-        "manufacturer": "Example",
-        "meter_model": "UMG",
-        "status": "online",
-        "data_status": "fresh",
-        "last_seen": "2026-10-08T17:00:00+08:00",
-        "age_seconds": 120,
-        "expected_interval_seconds": 300,
-        "supported_metrics": ["voltage_l1_n", "current_l1", "active_power_total"]
-      }
-    ],
-    "count": 1,
-    "truncated": false
-  },
-  "metadata": {"timezone": "Asia/Kuala_Lumpur", "generated_at": "2026-10-08T17:02:00+08:00"}
-}
-```
-
-`manufacturer` and `meter_model` may be null if V2 has no configured value. Do not infer them from the device name.
-
-### Metric catalog response
-
-Return configured metric names, canonical names/units where mapping exists, and observed availability for the requested window:
-
-```json
-{
-  "device_id": 519,
-  "available_metrics": [
-    {
-      "metric": "voltage_l1_n",
-      "canonical_metric": "voltage",
-      "phase": "L1-N",
-      "unit": "V",
-      "configured": true,
-      "available": true,
-      "sample_count": 24,
-      "first_timestamp": "2026-10-01T00:00:00+08:00",
-      "last_timestamp": "2026-10-01T23:00:00+08:00",
-      "coverage_percent": 100.0
-    }
-  ],
-  "truncated": false
-}
-```
-
-The current catalog implementation derives configured metric names from protocol-specific configuration tables. It must distinguish “configured” from “samples observed in the selected period.” If canonical unit/phase metadata is unavailable, return null/unknown rather than inventing it.
-
-### Time-series response
-
-```json
-{
-  "device_id": 519,
-  "device_name": "Main Meter",
-  "series": [
-    {
-      "metric": "voltage_l1_n",
-      "canonical_metric": "voltage",
-      "source_metric": "voltage_l1_n",
-      "phase": "L1-N",
-      "unit": "V",
-      "value_mode": "measured",
-      "aggregation": "mean",
-      "points": [
-        {"timestamp": "2026-10-01T00:00:00+08:00", "value": 240.8, "quality": "good"}
-      ],
-      "summary": {"count": 24, "min": 238.1, "max": 242.3, "avg": 240.5},
-      "coverage_percent": 100.0,
-      "truncated": false
-    }
-  ],
-  "range": {"start": "2026-10-01T00:00:00+08:00", "end": "2026-10-02T00:00:00+08:00", "timezone": "Asia/Kuala_Lumpur"}
-}
-```
-
-Every numeric point must carry timestamp, value, metric, and unit (at series level or point level with an unambiguous contract). Include source metric, value mode, aggregation, coverage/sample count, and truncation. Do not flatten phases into one series without identifying phase.
-
-### Energy ranking data response
-
-Return canonical consumption-delta rows, even if the AI Server performs sorting and rank assignment:
-
-```json
-{
-  "value_mode": "consumption_delta",
-  "unit": "kWh",
-  "rows": [
-    {"device_id": 519, "device_name": "Main Meter", "value": 884.8, "unit": "kWh", "sample_count": 2016, "coverage_percent": 98.5}
-  ],
-  "row_count": 1,
-  "truncated": false,
-  "range": {"start": "2026-10-01T00:00:00+08:00", "end": "2026-10-08T00:00:00+08:00", "timezone": "Asia/Kuala_Lumpur"}
-}
-```
-
-V2's canonical consumption engine calculates these values. Do not return cumulative register values and expect the LLM to subtract them. The AI Server may deterministically sort the rows and assign ranks.
-
-## Proposed MCP Tool 2: `get_alarm_data`
-
-### Operations
-
-| Operation | Use | Time range |
-|---|---|---|
-| `active_summary` | Currently open active/acknowledged alarms | Snapshot; no historical range |
-| `frequency` | Historical alarm counts grouped by alarm/device/severity as supported | Required |
-| `detail` | Stored lifecycle and trigger facts for a specific alarm/event | Alarm identifier required |
-
-### Request schema
-
-```json
-{
-  "authorization_id": "string",
   "operation": "active_summary",
   "site_id": 17,
   "building_id": null,
   "device_id": null,
-  "alarm_id": null,
   "severity": null,
-  "start_time": null,
-  "end_time": null,
-  "timezone": "Asia/Kuala_Lumpur",
   "limit": 50
 }
 ```
 
-Operation-specific rules:
+Historical `frequency` requires `start_time`, `end_time`, and timezone. `detail` requires either `alarm_event_id` or `alarm_id`, never an ambiguous generic `alarm_id` slot. Return stable identifiers, names, severity, state, timestamps, device/building context, row count, and truncation.
 
-- `active_summary`: return only active/acknowledged events that are not closed/resolved. No fake date range.
-- `frequency`: require `start_time`, `end_time`, and timezone; cap range and rows; return count, first/last seen, severity, and stable alarm/device identifiers where available.
-- `detail`: require one alarm/event reference and return only stored fields. Label whether the identifier is `alarm_id` or `alarm_event_id`; avoid ambiguous matching.
-- Alarm names can come from parsed raw payload or `alarm_type`; if neither is populated, return a neutral fallback and preserve the missing-name signal.
-- Never claim a root cause or recommended action unless V2 has stored evidence for it.
+### 3. `get_site_summary`
 
-### Response shape
+Operations: `overview`, `energy_series`.
 
-```json
-{
-  "active_count": 2,
-  "critical_count": 1,
-  "warning_count": 1,
-  "alarms": [
-    {
-      "alarm_event_id": 9001,
-      "alarm_id": 413,
-      "alarm_name": "Overvoltage",
-      "severity": "critical",
-      "status": "active",
-      "device_id": 519,
-      "device_name": "Main Meter",
-      "building_id": 4,
-      "building_name": "Plant Room",
-      "started_at": "2026-10-08T16:40:00+08:00"
-    }
-  ],
-  "returned_count": 1,
-  "truncated": false,
-  "alarm_state": "open_active_or_acknowledged"
-}
-```
+`overview` returns site identity, timezone, building list, device counts, and online/stale/offline counts when derivable. `energy_series` requires a bounded time range and bucket (`hour`, `day`, or `week`) and returns canonical kWh consumption deltas with range, timezone, coverage, and partial/truncated metadata.
 
-## Proposed MCP Tool 3: `get_site_summary`
+## General Request/Response Rules
 
-### Operations
-
-| Operation | Use |
-|---|---|
-| `overview` | Site identity, timezone, buildings, active device count, meter count when known |
-| `energy_series` | Site canonical energy consumption grouped into bounded hour/day/week buckets |
-
-### Request schema
-
-```json
-{
-  "authorization_id": "string",
-  "operation": "overview",
-  "site_id": 17,
-  "start_time": null,
-  "end_time": null,
-  "timezone": "Asia/Kuala_Lumpur",
-  "bucket": "day",
-  "limit": 100
-}
-```
-
-For `overview`, dates are omitted. For `energy_series`, both dates are required, the window must be bounded, and the timezone bucket boundaries must be explicit. Return kWh, value mode `consumption_delta`, coverage, sample count, partial-bucket status when available, and truncation.
-
-## Source Data In V2 (Confirmed In Repository)
-
-MCP must not connect to these tables. They are listed for the V2 developer implementing or reviewing the Django operation, so they can trace the existing implementation and verify the live schema.
-
-### Site and device metadata
-
-| Data | V2 source tables / fields observed in code | Current usage |
-|---|---|---|
-| Site | `public.org_site`: `site_id`, `site_name`, `project_id`, `address`, `latitude`, `longitude`, `billing_timezone`, `country_code`, `market_code`, `currency_code` | `_single_site_row()` in `apps/backend/apps/core/ai_ems.py`; company name joins `public.org_project.project_id/project_name` |
-| Building | `public.org_building`: `building_id`, `site_id`, `name`, `is_active`, `timezone` | `site_metadata_summary()` and scope checks |
-| Device | `public.org_device`: `device_id`, `name`, `site_id`, `protocol_id`, `template_id`, `status`, `data_status`, `virtual_unit_id`, `expected_reporting_interval_seconds`, `decommissioned_at` | `site_device_list()` and `_device_in_site()` |
-| Device protocol | `public.org_protocol`: `id`, `name` | Joined to `org_device.protocol_id` |
-| Model/manufacturer config | `public.device_template`: `template_id`, `template_name`, `json_data` (`meter_model`/`model`, `manufacturer`/`brand`) | `site_device_list()`; fields may be absent/null |
-| Device location | `public.org_device_location`: `device_id`, `building_id`, `floor_id`, `effective_to`, `is_primary`, `effective_from`; building via `public.org_floor` and `public.org_building` | Current effective location selected by V2 lateral query |
-| Virtual device identity | `public.virtual_devices`: `virtual_id`, `virtual_name`, `site_id`, `is_active`; link table `public.org_device_virtual` | Used to map virtual alarms and telemetry identity |
-
-### Configured metrics and telemetry history
-
-| Protocol/source | Configuration source | Historical values |
-|---|---|---|
-| MQTT (`protocol_id=1`) | `public.config_mqtt_parameter`: `device_id`, `parameter`, `is_etl_enabled` (plus config-specific fields) | `public.etl_mqtt`: `timestamp`, `device_id`, `site_id`, metric columns such as voltage/current/power/energy |
-| Modbus (`protocol_id=2`) | `public.config_modbus_parameter`: `device_id`, `parameter`, `is_etl_enabled` | `public.etl_modbus`: `timestamp`, `device_id`, `site_id`, metric columns such as `voltage_l1_n`, `current_l1`, `active_power_total`, energy fields |
-| Virtual (`protocol_id=3`) | `public.config_virtual_parameter`: `virtual_id`, `parameter`, `is_etl_enabled`, `etl_interval_minutes` | `public.etl_virtual`: `timestamp`, `virtual_id`, metric/value columns |
-| Manual imported device data (`protocol_id=4`) | `public.config_manual_parameter` | `public.manual_telemetry_point`: `device_id`, `parameter`, `timestamp`, `value`, `import_batch_id` |
-| Backfill | Not a normal device source; selected where applicable by canonical readers | `public.etl_backfill`; V2 checks source/entity/metric and deduplicates against measured samples |
-
-The exact metric column varies by protocol and configuration. V2 resolves it using `apps/enms/services/data_quality.py::resolve_series()` and queries the returned `SeriesDefinition` (`source_table`, entity/id column, parameter, unit/canonical metadata). Continue using this resolver. Do not build an LLM-provided SQL identifier or hard-code one column as if every protocol used it.
-
-For consumption totals/rankings, use `apps/core/consumption_engine.py` (`get_site_consumption_sources`, `aggregate_device_consumption_totals`, `aggregate_site_consumption_series_with_display`). The engine handles effective source membership and canonical consumption delta. Do not reproduce its counter reset, rollover, or hierarchy logic in MCP or prompt text.
-
-### Alarm lifecycle and detail
-
-| Data | V2 source tables / fields observed |
-|---|---|
-| Alarm event | `public.alarm_events`: `event_id`, `alarm_id`, `site_id`, `device_id`, `virtual_id`, `alarm_type`, `severity`, `status`, `source`, `details`, `raw_payload`, `created_at` |
-| Active lifecycle | `public.alarm_event_active`: `event_id` |
-| Acknowledgement | `public.alarm_event_acknowlegde` (spelling is the existing table name): `event_id`, `read_by`, `read_at`, `ack_by`, `ack_at`, `resolution_note` |
-| Resolved lifecycle | `public.alarm_event_resolved`: `event_id`, acknowledgement/read and resolved fields |
-| Closed lifecycle | `public.alarm_event_closed`: `event_id`, acknowledgement/read and close fields |
-| Alarm source names | `public.org_device`, `public.org_device_virtual`, `public.virtual_devices`; building through the effective `org_device_location`/floor/building joins |
-
-V2's `active_alarm_summary()` currently filters lifecycle rows to active/acknowledged and excludes closed/resolved events. Historical frequency is implemented by `_alarm_frequency()` in `apps/core/ai_historical.py`. Keep lifecycle semantics in those V2 services.
-
-### Existing implementation to inspect first
-
-- MCP policy and tool definitions: `apps/mcp/server.py`
-- Reviewed capability list and bounds: `apps/mcp/historical_capabilities.json`
-- V2 schema normalization and authorization contract: `apps/backend/apps/core/ai_contract.py`
-- Authorization issue/consume and endpoint boundary: `apps/backend/apps/core/ai_views.py`
-- Canonical EMS reads: `apps/backend/apps/core/ai_ems.py`
-- Legacy energy and alarm operations: `apps/backend/apps/core/ai_historical.py`
-- Canonical consumption logic: `apps/backend/apps/core/consumption_engine.py`
-- Metric resolution and coverage: `apps/backend/apps/enms/services/data_quality.py`
-- Schema declarations: `init_schema.sql`, `cold_schema.sql`, and database patches under `scripts/db/patches/`
-
-Use the deployed database schema as the final authority. SQL files and Django unmanaged models can be stale relative to a migrated environment; check the active migration/patch state before relying on a column name.
-
-## Calculation Ownership
-
-| Result | Owner |
-|---|---|
-| Device/site authorization, metric resolution, units and quality metadata | V2 canonical service |
-| Cumulative register to consumption delta | V2 consumption engine |
-| Fixed-interval maximum demand semantics and configured demand limits | V2 canonical demand service; do not substitute max instantaneous kW |
-| Sort returned per-device energy rows and assign top-N rank | AI Server deterministic Python code is acceptable |
-| Min/max/mean over a returned well-defined numeric series | AI Server deterministic Python code is acceptable; show metric/unit/phase/range and coverage |
-| Explain results in natural language | LLM, grounded only in returned facts |
-
-Every derived result should retain source operation, range, unit, value mode, coverage/sample count, and truncation metadata. If the returned data is incomplete or ambiguous, state that limitation or ask for another authorized query.
-
-## Common Response And Error Rules
-
-All success results are JSON objects with `success`, `data`, and `metadata`; include site/device identifiers and names where applicable. Use stable codes such as `INVALID_ARGUMENTS`, `SCOPE_DENIED`, `UNSUPPORTED_METRIC`, `NO_DATA`, `RANGE_TOO_LARGE`, `RESPONSE_TOO_LARGE`, and `SERVICE_UNAVAILABLE`. Never silently fall back to another source, metric, time range, or live endpoint.
-
-Keep these cases distinct:
-
-- `UNSUPPORTED_METRIC`: metric is not configured/supported for the selected device.
-- `NO_DATA`: metric is supported, but no historical rows exist in the requested window.
-- `SCOPE_DENIED`: selected site/building/device/alarm is outside authorized scope.
-- `RANGE_TOO_LARGE`: range or expected output exceeds reviewed limits.
-- `SERVICE_UNAVAILABLE`: source service failed; do not return invented values.
-
-## Data And Query Safety Requirements
-
-- MCP has no database, Redis, InfluxDB, MQTT, or storage credentials.
-- Django execution remains read-only, scoped, parameterized, timeout-bounded, and protected by atomic authorization consumption.
-- Never accept table names, column names, SQL, Django paths, HTTP methods, or URLs from the model/user.
-- Validate operation-specific fields against the versioned capability manifest in MCP and V2.
-- Bound rows, response bytes, time ranges, and runtime. Report `truncated` rather than implying completeness.
-- Keep unit, timezone, value mode, metric mapping, phase, freshness, coverage, and provenance in the response.
-- Do not expose secrets, authorization IDs, raw assertion values, or SQL errors in user-facing messages/logs.
+- Use explicit operation-specific input schemas. Reject unknown fields.
+- Use timezone-aware ISO-8601 timestamps; reject invalid, future/live, or oversized historical ranges.
+- Keep row/point limits bounded and return `truncated: true` when applicable.
+- Return numeric values as numbers, not formatted strings.
+- Include unit, metric/source column, device ID/name, phase, timestamp, aggregation, and value mode.
+- Keep errors distinct: `UNSUPPORTED_METRIC`, `NO_DATA`, `DEVICE_NOT_FOUND`, `SCOPE_DENIED`, `INVALID_ARGUMENTS`, `RANGE_TOO_LARGE`, and `BACKEND_UNAVAILABLE`.
+- Never silently swap a metric, phase, source table, or time range.
+- MCP must not have direct database credentials if the current deployment architecture forbids them. If the MCP developer is implementing a DB-backed adapter, it must run inside the approved V2 backend trust boundary using a read-only DB role and existing authorization/scope checks; do not expose DB connectivity from the external AI Server.
 
 ## Developer Deliverables
 
-1. Agree and version the three top-level MCP tool schemas and the operation enums in this document.
-2. Map each operation to one existing V2 capability or propose a reviewed V2 capability change. Do not deploy an MCP-only operation.
-3. Confirm the active DB schema for each table/column listed above and document differences from `init_schema.sql`/models.
-4. Trace each result to the canonical service and define metric/unit/value-mode semantics, including phase mapping and energy/demand handling.
-5. Implement exact data-plan-to-MCP argument pass-through and add a manifest/version/hash compatibility check.
-6. Return stable, JSON-safe errors and common metadata (`range`, `timezone`, `unit`, `value_mode`, `coverage`, `sample_count`, `truncated`, provenance where relevant).
-7. Provide request/response examples for inventory, metric discovery, timeseries, energy rows, active alarms, alarm frequency/detail, and site energy summary.
-8. Update the AI Server planner so it chooses only these three top-level tools, then validates operation-specific arguments before requesting V2 authorization.
-9. Provide a mapping from user-facing metric synonyms to canonical/configured metric names. Unknown mapping must result in catalog lookup or clarification, never a guessed column.
+1. Implement the agreed two- or three-tool surface with the exact operation enums above.
+2. For each metric, provide a checked mapping: user phrase → canonical metric → configured parameter → resolved ETL table.column → unit/phase/value mode.
+3. Confirm each table and column against the deployed database using `information_schema`; record any difference from `cold_schema.sql`, `init_schema.sql`, and Django models.
+4. Document device protocol routing and virtual/manual identifier joins.
+5. Provide sample JSON for every operation and for `UNSUPPORTED_METRIC`, `NO_DATA`, stale device, and truncated response.
+6. Demonstrate that energy uses canonical consumption deltas and that demand uses the correct demand semantics.
+7. Keep the existing AI Server, Chatbot UI, and DaxView integration request/response behavior unchanged unless separately approved.
 
 ## Acceptance Criteria
 
-- MCP tool discovery presents only the three agreed model-facing tools (or two if site summary is deliberately folded into device data).
-- Each call resolves to an explicit reviewed V2 operation and exact authorized argument hash.
-- No telemetry operation returns a metric that was not configured/resolved for that device.
-- Data rows contain numeric values, timestamps, units, source/canonical metric names, and phase where relevant.
-- Energy consumption is canonical `consumption_delta` in kWh; demand values retain fixed-interval demand semantics.
-- Alarm active/frequency/detail outputs follow V2 lifecycle rules and include event/source identifiers.
-- Access outside the approved site/device/building is denied even with a valid MCP service key.
-- Oversized ranges/results are bounded and clearly marked; missing data and unsupported metrics are distinguishable.
-- MCP cannot reach databases or live-value systems directly, and no write/control operation is exposed.
-- The AI Server can rank or calculate only from returned numeric facts, with the range/coverage/unit context retained in the final answer.
-
-## Scope Decision For First Delivery
-
-Implement the two core tools first (`get_device_data`, `get_alarm_data`). Keep `get_site_summary` as the third tool if overview/energy-summary questions are a required use case. If the team chooses two tools, add `overview` and `energy_summary` as explicit `get_device_data` operations rather than returning them implicitly with every telemetry response.
-
-Do not implement broad `get everything` behavior. The goal is clean, easy-to-calculate data with a small model-facing surface and explicit, bounded operations underneath.
+- The LLM sees only two or three concise MCP tools, each with clear purpose and operation enum.
+- A request for voltage/current returns the correctly configured voltage/current column(s) for that device's protocol; unsupported phases/metrics are reported explicitly.
+- One device's data does not leak into another site's result; all IDs are scope-checked.
+- Returned values are numeric and include timestamps, units, metric/column names, phase, value mode, coverage/sample count, and range.
+- Energy totals/rankings use `consumption_delta` kWh rather than a sum of cumulative register values.
+- Alarm state distinguishes active, acknowledged, resolved, and closed lifecycle records.
+- No LLM-supplied table name, column name, SQL, or URL reaches a query executor.
+- Large responses are bounded, marked as truncated, and never presented as complete.
+- Existing chatbot/AI-server integration contracts remain compatible.
