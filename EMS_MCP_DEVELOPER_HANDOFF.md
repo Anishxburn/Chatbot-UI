@@ -1,5 +1,7 @@
 # Simplified EMS MCP Tool Specification
 
+> Related architecture diagrams and the MCP return roadmap: [EMS_MCP_ERD_AND_ROADMAP.md](EMS_MCP_ERD_AND_ROADMAP.md).
+
 ## Purpose
 
 This document proposes a smaller MCP tool surface for the existing DaxView AI chatbot. It is a tool and data-detail proposal only. Keep the current AI Server, Chatbot UI, DaxView callback, authorization, and deployment architecture unchanged.

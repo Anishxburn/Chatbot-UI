@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1450" viewBox="0 0 1900 1450" role="img" aria-labelledby="title desc">
+  <title id="title">DaxView EMS chatbot system data flow</title>
+  <desc id="desc">End-to-end flow showing DaxView authorization, AI Server conversation jobs, optional MCP retrieval and deterministic calculations, LLM response, prediction lab, trace dashboard, and sandbox mode.</desc>
+  <defs>
+    <style>
+      text{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#162c3a}.title{font-size:31px;font-weight:700}.subtitle{font-size:15px;fill:#516979}.lane{font-size:16px;font-weight:700;letter-spacing:.5px}.box{fill:#fff;stroke:#688594;stroke-width:2}.blue{fill:#eaf3fb;stroke:#367ca8}.teal{fill:#e9f6f2;stroke:#258679}.gold{fill:#fff5df;stroke:#cb922a}.violet{fill:#f3eefb;stroke:#8064a9}.gray{fill:#f2f5f7;stroke:#8597a2}.head{font-size:16px;font-weight:700}.body{font-size:13px;fill:#4d6471}.tiny{font-size:12px;fill:#526b78}.wire{fill:none;stroke:#41606e;stroke-width:2.5}.datawire{fill:none;stroke:#258679;stroke-width:3}.controlwire{fill:none;stroke:#367ca8;stroke-width:2.5;stroke-dasharray:8 6}.warningwire{fill:none;stroke:#cb922a;stroke-width:2.5;stroke-dasharray:8 6}.label{font-size:12px;font-weight:700;fill:#375665}.badge{font-size:11px;font-weight:700}.step{font-size:12px;font-weight:700;fill:#fff}.divider{stroke:#d8e2e7;stroke-width:1.5}.note{font-size:13px;fill:#405d6b}.source{font-size:12px;fill:#647986}
+    </style>
+    <marker id="arr" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1L10 6L1 11Z" fill="#41606e"/></marker>
+    <marker id="arrTeal" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1L10 6L1 11Z" fill="#258679"/></marker>
+    <marker id="arrBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1L10 6L1 11Z" fill="#367ca8"/></marker>
+    <marker id="arrGold" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1 1L10 6L1 11Z" fill="#cb922a"/></marker>
+  </defs>
+  <rect width="1900" height="1450" fill="#fff"/>
+  <text x="42" y="48" class="title">DaxView EMS chatbot · end-to-end data flow</text>
+  <text x="42" y="76" class="subtitle">Solid teal = EMS data · dashed blue = authorization/control · solid dark = chat/result · dashed gold = optional synthetic sandbox data</text>
+
+  <!-- Main chat lane -->
+  <rect x="30" y="100" width="1840" height="810" rx="14" fill="#f7fafb" stroke="#d9e3e8"/>
+  <text x="55" y="135" class="lane">A. DAXVIEW CHAT: ONE USER TURN, WITH AN OPTIONAL LIVE-DATA BRANCH</text>
+
+  <!-- Main request path -->
+  <g transform="translate(55 175)"><rect width="190" height="105" rx="10" class="box blue"/><circle cx="22" cy="22" r="14" fill="#367ca8"/><text x="18" y="26" class="step">1</text><text x="45" y="30" class="head">User</text><text x="18" y="58" class="body">Asks a question in</text><text x="18" y="78" class="body">DaxView AI Insights</text></g>
+  <g transform="translate(300 175)"><rect width="230" height="105" rx="10" class="box blue"/><circle cx="22" cy="22" r="14" fill="#367ca8"/><text x="18" y="26" class="step">2</text><text x="45" y="30" class="head">DaxView app/API</text><text x="18" y="58" class="body">Authenticates user; supplies</text><text x="18" y="78" class="body">authorized site/context</text></g>
+  <g transform="translate(585 175)"><rect width="245" height="105" rx="10" class="box blue"/><circle cx="22" cy="22" r="14" fill="#367ca8"/><text x="18" y="26" class="step">3</text><text x="45" y="30" class="head">AI Server turn API</text><text x="18" y="58" class="body">Accepts turn; stores turn/job;</text><text x="18" y="78" class="body">returns job ID promptly</text></g>
+  <g transform="translate(885 175)"><rect width="230" height="105" rx="10" class="box gray"/><text x="18" y="30" class="head">PostgreSQL</text><text x="18" y="58" class="body">Conversation → turn → job</text><text x="18" y="78" class="body">→ ordered job events</text></g>
+  <g transform="translate(1170 175)"><rect width="275" height="105" rx="10" class="box teal"/><circle cx="22" cy="22" r="14" fill="#258679"/><text x="18" y="26" class="step">4</text><text x="45" y="30" class="head">AI turn worker</text><text x="18" y="58" class="body">Loads conversation context;</text><text x="18" y="78" class="body">classifies what the question needs</text></g>
+  <path d="M245 227H298" class="wire" marker-end="url(#arr)"/><text x="252" y="214" class="label">question</text>
+  <path d="M530 227H583" class="wire" marker-end="url(#arr)"/><text x="536" y="214" class="label">submit turn / poll job</text>
+  <path d="M830 227H883" class="wire" marker-end="url(#arr)"/>
+  <path d="M1115 227H1168" class="wire" marker-end="url(#arr)"/>
+  <path d="M1165 262H1000V290" class="controlwire" marker-end="url(#arrBlue)"/><text x="1020" y="282" class="label">persist job/events</text>
+
+  <!-- Branch decision and model -->
+  <path d="M1307 280V320" class="wire" marker-end="url(#arr)"/>
+  <path d="M1307 320L1390 370L1307 420L1224 370Z" fill="#fff" stroke="#688594" stroke-width="2"/>
+  <text x="1260" y="365" class="body" font-weight="700">Needs live</text><text x="1268" y="383" class="body" font-weight="700">EMS data?</text>
+  <g transform="translate(1510 320)"><rect width="300" height="105" rx="10" class="box violet"/><text x="18" y="30" class="head">LLM / EMS knowledge</text><text x="18" y="58" class="body">General explanation; no MCP call</text><text x="18" y="78" class="body">unless factual live readings are needed</text></g>
+  <path d="M1390 370H1508" class="wire" marker-end="url(#arr)"/><text x="1413" y="357" class="label">No</text>
+
+  <!-- live data subflow -->
+  <text x="55" y="345" class="lane" fill="#258679">LIVE DATA BRANCH · ONLY WHEN NEEDED</text>
+  <g transform="translate(55 390)"><rect width="230" height="115" rx="10" class="box teal"/><circle cx="22" cy="22" r="14" fill="#258679"/><text x="18" y="26" class="step">5</text><text x="45" y="30" class="head">Data planner</text><text x="18" y="58" class="body">Chooses approved operation;</text><text x="18" y="78" class="body">builds bounded arguments</text><text x="18" y="98" class="tiny">site/device + range + metrics</text></g>
+  <g transform="translate(355 390)"><rect width="255" height="115" rx="10" class="box blue"/><circle cx="22" cy="22" r="14" fill="#367ca8"/><text x="18" y="26" class="step">6</text><text x="45" y="30" class="head">DaxView data-plan callback</text><text x="18" y="58" class="body">Checks user, site, time range,</text><text x="18" y="78" class="body">and policy; normalizes args</text><text x="18" y="98" class="tiny">returns authorized plan/token</text></g>
+  <g transform="translate(680 390)"><rect width="240" height="115" rx="10" class="box teal"/><circle cx="22" cy="22" r="14" fill="#258679"/><text x="18" y="26" class="step">7</text><text x="45" y="30" class="head">MCP client / tool</text><text x="18" y="58" class="body">Calls approved tool with exact</text><text x="18" y="78" class="body">authorized arguments</text><text x="18" y="98" class="tiny">summary · device · alarm · values</text></g>
+  <g transform="translate(990 390)"><rect width="270" height="115" rx="10" class="box gold"/><text x="18" y="30" class="head">DaxView MCP service</text><text x="18" y="58" class="body">Enforces authorized read; maps</text><text x="18" y="78" class="body">the request to EMS source data</text><text x="18" y="98" class="tiny">MCP endpoint, not direct AI SQL</text></g>
+  <g transform="translate(1330 390)"><rect width="240" height="115" rx="10" class="box gold"/><text x="18" y="30" class="head">EMS source data</text><text x="18" y="58" class="body">Configured devices, metrics,</text><text x="18" y="78" class="body">telemetry and alarm records</text><text x="18" y="98" class="tiny">DaxView-owned stores/services</text></g>
+  <path d="M1307 420V448H285" class="datawire" marker-end="url(#arrTeal)"/><text x="890" y="441" class="label">Yes: request data</text>
+  <path d="M285 448H353" class="controlwire" marker-end="url(#arrBlue)"/>
+  <path d="M610 448H678" class="controlwire" marker-end="url(#arrBlue)"/>
+  <path d="M920 448H988" class="datawire" marker-end="url(#arrTeal)"/>
+  <path d="M1260 448H1328" class="datawire" marker-end="url(#arrTeal)"/>
+  <path d="M1330 478H1260" class="datawire" marker-end="url(#arrTeal)"/><text x="1268" y="495" class="tiny">read query</text>
+  <path d="M990 492H920" class="datawire" marker-end="url(#arrTeal)"/><text x="928" y="522" class="tiny">normalized JSON rows</text>
+  <g transform="translate(680 555)"><rect width="320" height="115" rx="10" class="box teal"/><circle cx="22" cy="22" r="14" fill="#258679"/><text x="18" y="26" class="step">8</text><text x="45" y="30" class="head">Validate + calculate</text><text x="18" y="58" class="body">Check metric/unit/coverage; compute</text><text x="18" y="78" class="body">rank, max, totals, comparisons, etc.</text><text x="18" y="98" class="tiny">raw MCP data is transient by default</text></g>
+  <path d="M800 505V553" class="datawire" marker-end="url(#arrTeal)"/>
+  <g transform="translate(1080 555)"><rect width="340" height="115" rx="10" class="box violet"/><circle cx="22" cy="22" r="14" fill="#8064a9"/><text x="18" y="26" class="step">9</text><text x="45" y="30" class="head">LLM composes the answer</text><text x="18" y="58" class="body">Uses validated facts + relevant EMS</text><text x="18" y="78" class="body">definitions; explains assumptions</text><text x="18" y="98" class="tiny">may also return chart/report JSON</text></g>
+  <path d="M1000 612H1078" class="datawire" marker-end="url(#arrTeal)"/>
+
+  <!-- Response flow -->
+  <g transform="translate(1510 555)"><rect width="300" height="115" rx="10" class="box blue"/><circle cx="22" cy="22" r="14" fill="#367ca8"/><text x="18" y="26" class="step">10</text><text x="45" y="30" class="head">DaxView renders response</text><text x="18" y="58" class="body">Polls job events; shows answer,</text><text x="18" y="78" class="body">and chart/report if supported</text></g>
+  <path d="M1420 612H1508" class="wire" marker-end="url(#arr)"/>
+  <path d="M1660 425V553" class="wire" marker-end="url(#arr)"/><text x="1670" y="490" class="label">general answer</text>
+
+  <!-- Details / safety note -->
+  <rect x="55" y="700" width="1755" height="175" rx="10" fill="#fff" stroke="#d7e1e5"/>
+  <text x="78" y="733" class="head">Where data is stored or held</text>
+  <text x="78" y="762" class="body">• PostgreSQL: conversation, turn, job, and ordered job-event records. DaxView polls the AI Server with the returned job ID. MCP readings are transient; raw payloads are not persisted by default.</text>
+  <text x="78" y="788" class="body">• Trace dashboard: AI Server trace events are in memory in the current setup; they clear on container restart. Avoid exposing secrets or unrestricted raw telemetry.</text>
+  <text x="78" y="814" class="body">• DaxView remains the source of truth for users, site scope, authorization, device configuration, and historical EMS readings.</text>
+  <text x="78" y="840" class="body">• If data is missing, invalid, unauthorized, or stale, return a limitation/error; never let the LLM fill in measurements.</text>
+
+  <!-- Separate tools lane -->
+  <rect x="30" y="935" width="1840" height="465" rx="14" fill="#fbfafc" stroke="#ded8e8"/>
+  <text x="55" y="972" class="lane">B. RELATED TOOLS: PREDICTION AND SANDBOX ARE SEPARATE PATHS</text>
+  <g transform="translate(60 1015)"><rect width="520" height="230" rx="12" class="box teal"/><text x="25" y="38" class="head">Prediction Lab · historical data forecast</text><text x="25" y="72" class="body">1. User opens Predictions in the debug dashboard.</text><text x="25" y="98" class="body">2. AI Server requests authorized daily site energy through</text><text x="45" y="120" class="body">the same DaxView data-plan → MCP read path above.</text><text x="25" y="146" class="body">3. Local deterministic algorithm forecasts from validated</text><text x="45" y="168" class="body">history; reports coverage and backtest error.</text><text x="25" y="194" class="body">4. SQLite stores prediction datasets/runs; dashboard shows chart.</text><text x="25" y="216" class="tiny">Prediction numbers are computed by code, not invented by the LLM.</text></g>
+  <g transform="translate(690 1015)"><rect width="520" height="230" rx="12" class="box violet"/><text x="25" y="38" class="head">Sandbox · local model and optional synthetic data</text><text x="25" y="72" class="body">1. User asks from the AI MCP Trace Dashboard sandbox.</text><text x="25" y="98" class="body">2. Ollama/LLM answers a normal EMS question.</text><text x="25" y="124" class="body">3. Synthetic sample readings are attached only when useful</text><text x="45" y="146" class="body">or selected for a calculation test.</text><text x="25" y="172" class="body">4. No DaxView authorization, MCP call, or live data is used.</text><text x="25" y="204" class="tiny">Clearly label illustrative values as synthetic, never live site facts.</text></g>
+  <g transform="translate(1320 1015)"><rect width="490" height="230" rx="12" class="box gray"/><text x="25" y="38" class="head">Debug / trace dashboard</text><text x="25" y="72" class="body">• Reads AI Server trace and prediction endpoints.</text><text x="25" y="98" class="body">• Shows tool choice, authorized plan, timing, validation,</text><text x="45" y="120" class="body">calculation summary, outcome, and chart preview.</text><text x="25" y="152" class="body">• Trace records are operational diagnostics, not the</text><text x="45" y="174" class="body">source of EMS readings or authorization.</text><text x="25" y="206" class="tiny">Current trace retention: in-memory; container restart clears it.</text></g>
+  <path d="M580 1130H688" class="datawire" marker-end="url(#arrTeal)"/><text x="590" y="1117" class="tiny">shared MCP route</text>
+  <path d="M1210 1130H1318" class="controlwire" marker-end="url(#arrBlue)"/><text x="1218" y="1117" class="tiny">diagnostic output</text>
+  <text x="60" y="1322" class="source">Architecture reference: AI_SERVER_DAXVIEW_INTEGRATION_PLAN.md, PREDICTION_ROLLOUT.md, current db/init.sql and prediction_lab.py.</text>
+  <text x="60" y="1348" class="source">This diagram describes the intended/current documented integration boundary. Verify deployment-specific services and live MCP schemas before treating it as an operational map.</text>
+</svg>
