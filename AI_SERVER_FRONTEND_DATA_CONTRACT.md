@@ -75,7 +75,7 @@ In this integration path, a “report” is currently the composed chat answer p
 
 ## Debugging the blank table preview
 
-The debug dashboard's `ai_outcome_debug` trace records `answer`, `charts`, `tables`, `generation`, and `charts_enabled`. Expand **Generation details** to inspect the operation arguments, chart specs, table objects, and report classification. Expand **Inspect raw table payload** beneath an individual table to see its columns and first three rows.
+The debug dashboard's `ai_outcome_debug` trace records `answer`, `charts`, `tables`, `generation`, and `charts_enabled`. Expand **Generation details** to inspect the operation arguments, chart specs, table objects, and report classification. Beneath a table, **Raw row data** prints the first five records without column mapping, and **Inspect raw table payload** shows its columns, sample rows, and row count.
 
 If a table says `7 shown of 7` but its cells are blank, compare the raw rows to the column keys. The expected pairing is, for example, `columns: [{"key":"period"}, {"key":"value"}]` with rows like `{ "period":"2026-10-07", "value":17651039.03 }`. If the raw rows contain values while the visible table is blank, reload/rebuild the AI Server; the debug dashboard is embedded in its server image. In this repository's compose setup, source is not mounted into the API container, so rebuild and recreate it after changing `server.py`:
 
