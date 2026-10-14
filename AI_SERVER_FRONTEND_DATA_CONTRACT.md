@@ -11,6 +11,18 @@ This note describes the DaxView integration path implemented by the AI Server. I
 
 The integration routes are authenticated and scoped to the authorized deployment, company, and user. The frontend should use its normal authenticated API client and must not expose credentials or authorization grants in the message body.
 
+### Clarifying an ambiguous device name
+
+When a telemetry question contains an exact authorized device name, the AI
+Server resolves that name directly, even if another device has a similar name.
+When the supplied name is only a partial match and multiple devices are equally
+plausible, the server sends a normal `message` event with the candidate device
+names and asks the user to reply with the intended name. The conversation keeps
+the original metric, site, and time range for that reply. Device ambiguity is
+not sent as `waiting_for_user`: that event currently supports the site,
+building, and time-range context fields, and a device selector would otherwise
+render as an empty form in clients that do not implement device choices.
+
 ## Message payload
 
 The server emits a message event in this shape (optional fields are omitted when there is no corresponding data):
