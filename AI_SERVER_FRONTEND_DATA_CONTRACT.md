@@ -23,17 +23,6 @@ not sent as `waiting_for_user`: that event currently supports the site,
 building, and time-range context fields, and a device selector would otherwise
 render as an empty form in clients that do not implement device choices.
 
-### Clarifying broad historical-reading requests
-
-For a request such as “I need historical device readings at this site,” the
-server asks in a normal `message` event for any missing metric and period. It
-does not fetch data or silently assume energy or the default seven-day range.
-The next user reply can provide either or both details; the conversation keeps
-the site and previously supplied detail. For site-wide energy, it then queries
-the site energy summary. For a per-device metric such as voltage or current,
-it asks for a device name before fetching. The user can answer in plain text;
-the UI does not need a metric selector or a custom clarification form.
-
 ## Message payload
 
 The server emits a message event in this shape (optional fields are omitted when there is no corresponding data):
