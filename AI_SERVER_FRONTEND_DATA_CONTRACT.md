@@ -23,6 +23,7 @@ The server emits a message event in this shape (optional fields are omitted when
       "type": "line",
       "title": "Daily Site Energy",
       "labels": ["2026-10-07", "2026-10-08"],
+      "summary": "Daily site energy changed slightly over the requested period.",
       "series": [{ "name": "Energy", "unit": "kWh", "data": [17651039.03, 17539567.70] }]
     }
   ],
@@ -57,6 +58,7 @@ The server emits a message event in this shape (optional fields are omitted when
 
 - `text`: user-facing answer. The UI should render it as readable text/Markdown with clear paragraph spacing.
 - `charts`: chart specifications made from returned numeric data. `labels` align by index with each series' `data`; `unit` describes values. Do not infer chart values from the prose answer.
+- `charts[].summary` (optional): a short, data-grounded explanation of the plotted series. Time-series labels are formatted for the requested/site timezone; the answer or chart summary states the full period and timezone.
 - `tables`: tabular data. `columns` define display order and labels; each row is an object keyed by each column's `key`. Render a cell from `row[column.key]`, preserving numeric zero. Show a clear placeholder for null/missing fields.
 - `presentation`: display classification and suggested sections. It helps the UI choose a presentation; it does not replace `text`, `charts`, or `tables`.
 - `row_count` is the source count where supplied; the visible `rows` list may be capped. `truncated` indicates source truncation.
