@@ -89,6 +89,30 @@ h1 { max-width: 560px; margin: 0; font-size: 30px; line-height: 1.12; letter-spa
 .flow-source-title { margin: 10px 0 4px; color: #17202a; font-weight: 800; }
 .source-list { display: grid; gap: 4px; margin: 0; padding-left: 18px; }
 
+.chat-chart {
+  width: min(100%, 620px);
+  margin-top: 14px;
+  padding: 15px;
+  overflow: hidden;
+  border: 1px solid #dbe5ef;
+  border-radius: 14px;
+  background: linear-gradient(150deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+}
+.chat-chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #172033; }
+.chat-chart-heading strong, .chat-table-card > strong { font-size: 14px; }
+.chat-chart-heading span { flex: 0 0 auto; padding: 4px 9px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.chat-chart-canvas { display: block; width: 100%; max-width: 100%; margin: 8px 0; }
+.chat-chart-summary { margin: 7px 0 0; color: #475569; font-size: 12px; line-height: 1.5; }
+.chat-chart details { margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 9px; }
+.chat-chart details summary { color: #0f766e; cursor: pointer; font-size: 12px; font-weight: 750; }
+.chart-data-table { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: 11px; }
+.chart-data-table th, .chart-data-table td { padding: 7px 8px; border-bottom: 1px solid #e8edf4; text-align: left; }
+.chart-data-table th { position: sticky; top: 0; background: #f1f5f9; color: #475569; }
+.chat-chart details .chart-data-table { display: block; max-height: 260px; overflow: auto; }
+.chat-table-card { overflow-x: auto; }
+.chat-table-card .chart-data-table { white-space: nowrap; }
+
 .composer { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 18px 24px; border-top: 1px solid #e3e8f1; background: #fbfcff; }
 textarea {
   min-width: 0;
