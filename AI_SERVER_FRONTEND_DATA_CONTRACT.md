@@ -16,7 +16,10 @@ The integration routes are authenticated and scoped to the authorized deployment
 When required details are missing, the AI Server emits `waiting_for_user` with
 `input_type: "text"`, a concise prompt, missing fields, and a sample sentence.
 The user can type a natural-language reply; the next turn is linked to the
-clarification and resumes the original request with its saved context. The
+clarification and resumes the original request with its saved context. Include
+the clarification event's `clarification_turn_id` as
+`clarification_for_turn_id` on the reply turn request. Do not submit the
+assistant's sample sentence as the operator reply. The
 server extracts candidate details, resolves device names against the
 authorized site's inventory, and performs its normal completeness and
 authorization checks before fetching historical readings. If details remain
