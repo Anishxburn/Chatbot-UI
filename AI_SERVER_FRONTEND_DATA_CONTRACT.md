@@ -13,15 +13,25 @@ The integration routes are authenticated and scoped to the authorized deployment
 
 ### Clarifying an ambiguous device name
 
-When a telemetry question contains an exact authorized device name, the AI
-Server resolves that name directly, even if another device has a similar name.
-When the supplied name is only a partial match and multiple devices are equally
-plausible, the server sends a normal `message` event with the candidate device
-names and asks the user to reply with the intended name. The conversation keeps
-the original metric, site, and time range for that reply. Device ambiguity is
-not sent as `waiting_for_user`: that event currently supports the site,
-building, and time-range context fields, and a device selector would otherwise
-render as an empty form in clients that do not implement device choices.
+When required details are missing, the AI Server emits `waiting_for_user` with
+`input_type: "text"`, a concise prompt, missing fields, and a sample sentence.
+The user can type a natural-language reply; the next turn is linked to the
+clarification and resumes the original request with its saved context. The
+server extracts candidate details, resolves device names against the
+authorized site's inventory, and performs its normal completeness and
+authorization checks before fetching historical readings. If details remain
+ambiguous, it asks another focused text question. Device alternatives are
+shown as readable names where authorized inventory is available, not as a
+dropdown.
+
+Example clarification: “Which device or meter, metric, and period should I
+use? Example: ‘Show energy readings for Main Meter from 1–7 October 2026.’”
+
+The debug dashboard persists sanitized trace events in PostgreSQL when the
+dashboard and database are enabled. `GET /debug/traces?limit=200&q=planner`
+searches saved diagnostic metadata; `before_id` loads older pages. Persisted
+records omit free-text prompts, answers, errors, and raw MCP bodies while
+retaining event shape and operational metadata.
 
 ## Message payload
 
